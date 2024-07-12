@@ -1,26 +1,35 @@
-import {doGoogleSearch} from "@/libs/rankingFunctions";
+import { doGoogleSearch } from "@/libs/rankingFunctions";
 import mongoose from "mongoose";
-import {Keyword} from "../../../models/Keyword";
-import {Result} from "../../../models/Result";
+import { Keyword } from "../../../models/Keyword";
+import { Result } from "../../../models/Result";
 
 export async function GET() {
-  mongoose.connect(process.env.MONGODB_URI);
-  const keywordsDocs = [...await Keyword.find()];
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
 
-  const googleSearchPromises = [];
-  const savePromises = [];
-  for (const keywordDoc of keywordsDocs) {
-    const googleSearchPromise = doGoogleSearch(keywordDoc.keyword);
-    googleSearchPromise.then(responseId => {
-      const savePromise = Result.create({
-        domain: keywordDoc.domain,
-        keyword: keywordDoc.keyword,
-        brightDataResponseId: responseId,
-      });
-      savePromises.push(savePromise);
+    const keywordsDocs = await Keyword.find();
+
+    const googleSearchPromises = keywordsDocs.map(async keywordDoc => {
+      try {
+        const responseId = await doGoogleSearch(keywordDoc.keyword);
+        const result = await Result.create({
+          domain: keywordDoc.domain,
+          keyword: keywordDoc.keyword,
+          brightDataResponseId: responseId,
+          complete: false, // Assuming initially incomplete
+        });
+        return result;
+      } catch (error) {
+        console.error(`Error processing keyword ${keywordDoc.keyword}:`, error);
+        throw error;
+      }
     });
-    googleSearchPromises.push( googleSearchPromise );
+
+    await Promise.allSettled(googleSearchPromises);
+
+    return Response.json(true);
+  } catch (error) {
+    console.error('Error in GET /api/check-all-keywords:', error);
+    return Response.json(false);
   }
-  await Promise.allSettled([...googleSearchPromises, ...savePromises]);
-  return Response.json(true);
 }

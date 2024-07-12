@@ -17,31 +17,31 @@ export async function POST(req) {
 
     const response = await axios.get(url, { headers });
 
-    const ourResultDoc = await Result.findOne({
-      brightDataResponseId: response_id,
-    });
+    const ourResultDoc = await Result.findOne({ brightDataResponseId: response_id });
 
     if (ourResultDoc) {
       const domain = ourResultDoc.domain;
       const keyword = ourResultDoc.keyword;
-      const rank = response?.data?.organic
-        ?.find(result => result.link.includes(domain))?.rank;
+      const rank = response.data.organic?.find(result => result.link.includes(domain))?.rank;
+      
       ourResultDoc.complete = true;
-      if (rank) {
+      if (rank !== undefined) {
         ourResultDoc.rank = rank;
         console.log(`Rank ${rank} saved for keyword ${keyword} and domain ${domain}`);
+      } else {
+        console.log(`No rank found for keyword ${keyword} and domain ${domain}`);
       }
       await ourResultDoc.save();
     } else {
-      console.log('our result NOT found');
+      console.log('Result document not found');
     }
+
     return new Response(JSON.stringify(true), { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error in POST /api/results:', error);
     return new Response('Internal Server Error', { status: 500 });
   }
 }
-
 export async function GET(req) {
   try {
     const url = new URL(req.url);
@@ -49,7 +49,7 @@ export async function GET(req) {
     const keyword = url.searchParams.get('keyword');
 
     if (domain && keyword) {
-      const results = await Result.find({ domain, keyword });
+      const results = await Result.find({ domain, keyword }).exec();
       return new Response(JSON.stringify(results), {
         headers: { 'Content-Type': 'application/json' },
       });
